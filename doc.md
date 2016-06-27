@@ -14,8 +14,7 @@ Predicts the median number density at zf for a galaxy population with initial nu
 - Nf : Median number density of the population at zf, in units of log(Mpc^-3).
 
 ###constantN(N0, z0, zf):
-    """ Comparable to evolvingN, but for a constant number density. """
-    return N0
+Comparable to evolvingN, but for a constant number density. 
 
 ###sigmaN(N0, z0, zf):
 Predicts the width of the logarithmic number density distribution at zf for a galaxy population with initial number density N0 at redshift z0.
@@ -127,7 +126,7 @@ Converts stellar mass to number density at the given redshift using the ZFOURGE 
 **Returns**
 - N : Comoving cumulative number density in units of log(Mpc^-3), same dimensions as M.
 
-###def getmass_zfourge(N, z):
+###getmass_zfourge(N, z):
 Converts number density to stellar mass at the given redshift using the Illustris mass functions.
 
 **Parameters**
