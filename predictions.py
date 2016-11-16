@@ -6,7 +6,7 @@ import numpy as np
 from .Nevol import *
 from .massfunctions import *
 
-def assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafunc=sigmaN, MtoN=getnum_zfourge):
+def assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafunc=sigmaN, massfunc='zfourge'):
     """
     For every galaxy in a sample at redshift zf, find the probability that it is the progenitor/descendant 
     of a galaxy with mass M0 at redshift z0.
@@ -26,15 +26,16 @@ def assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafun
             Must take arguments (N0, z0, zf), defaults to evolvingN.
     sigmafunc : (Optional) Function which predicts the width of the number density distribution at another redshift.
                 Must take arguments (N0, z0, zf), defaults to sigmaN.
-    MtoN : (Optional) Function which converts from mass to number density.
-           Must take arguments (N0, z0, zf), defaults to getnum_zfourge.
+    massfunc : (Optional) Keyword for mass function used to convert from mass to number density. 
+           Currently available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
+           Defaults to 'zfourge'.
 
     Returns
     =======
     Array of progenitor probabilities, the same dimension as M_sample
     """
-    N0 = MtoN(M0, z0)
-    N_sample = MtoN(M_sample, zf)
+    N0 = getnum(M0, z0, massfunc=massfunc)
+    N_sample = getmass(M_sample, zf, massfunc=massfunc)
     dpdlogN = newnum_distrib(N0, z0, zf, N_sample, Nfunc=Nfunc, sigmafunc=sigmafunc)
     pgal = dpdlogN / 10.**N_sample / volume
     return pgal 
@@ -65,7 +66,7 @@ def newnum_distrib(N0, z0, zf, Narr, Nfunc=evolvingN, sigmafunc=sigmaN):
     sigma = sigmafunc(N0, z0, zf)
     return np.exp(-(Narr-Nf)**2/(2*sigma**2))/(sigma*np.sqrt(2.*pi))
 
-def newmass(M0, z0, zf, Nfunc=evolvingN, MtoN=getnum_zfourge, NtoM=getmass_zfourge):
+def newmass(M0, z0, zf, Nfunc=evolvingN, massfunc='zfourge'):
     """
     For a galaxy population with initial stellar mass M0 at redshift z0, predicts the median 
     stellar mass at another redshift zf.
@@ -78,20 +79,20 @@ def newmass(M0, z0, zf, Nfunc=evolvingN, MtoN=getnum_zfourge, NtoM=getmass_zfour
          May be greater than or less than z0.
     Nfunc : (Optional) Function which evolves number density to another redshift.
             Must take arguments (N0, z0, zf), defaults to evolvingN.
-    MtoN : (Optional) Function which converts from mass to number density.
-           Must take arguments (N0, z0, zf), defaults to getnum_zfourge.
-    NtoM : (Optional) Function which converts from number density to mass.
-           Must take arguments (N0, z0, zf), defaults to getmass_zfourge.
+    massfunc : (Optional) Keyword for mass function used to convert between mass and number density. 
+           Currently available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
+           Defaults to 'zfourge'.
 
     Returns
     =======
     Mf : Median stellar mass (in units of log(Msun)) of the population at zf.
     """
-    N0 = MtoN(M0, z0)
-    Nf = Nfunc(N0, z0, zf)
-    return NtoM(Nf, zf)
 
-def newmass_distrib(M0, z0, zf, Marr=None, Medges=None, Nfunc=evolvingN, sigmafunc=sigmaN, MtoN=getnum_zfourge):
+    N0 = getnum(M0, z0, massfunc=massfunc)
+    Nf = Nfunc(N0, z0, zf)
+    return getmass(Nf, zf, massfunc=massfunc)
+
+def newmass_distrib(M0, z0, zf, Marr=None, Medges=None, Nfunc=evolvingN, sigmafunc=sigmaN, massfunc='zfourge'):
     """
     Evaluates the probability that progenitors/descendants lie in the given mass bins at zf.
 
@@ -107,8 +108,9 @@ def newmass_distrib(M0, z0, zf, Marr=None, Medges=None, Nfunc=evolvingN, sigmafu
             Must take arguments (N0, z0, zf), defaults to evolvingN.
     sigmafunc : (Optional) Function which predicts the width of the number density distribution at another redshift.
                 Must take arguments (N0, z0, zf), defaults to sigmaN.
-    MtoN : (Optional) Function which converts from mass to number density.
-           Must take arguments (N0, z0, zf), defaults to getnum_zfourge.
+    massfunc : (Optional) Keyword for mass function used to convert between mass and number density. 
+           Currently available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
+           Defaults to 'zfourge'.
 
     Returns
     =======
@@ -138,8 +140,8 @@ def newmass_distrib(M0, z0, zf, Marr=None, Medges=None, Nfunc=evolvingN, sigmafu
         except:
             raise ValueError("Medges must have length of at least 2.")
 
-    Narr = MtoN(Marr, zf)
-    Nedges = MtoN(Medges, zf)
+    Narr = getnum(Marr, zf, massfunc=massfunc)
+    Nedges = getnum(Medges, zf, massfunc=massfunc)
     dN = abs(Nedges[1:] - Nedges[:-1])
-    return newnum_distrib(MtoN(M0, z0), z0, zf, Narr, Nfunc=Nfunc, sigmafunc=sigmafunc) * dN
+    return newnum_distrib(getnum(M0, z0, massfunc=massfunc), z0, zf, Narr, Nfunc=Nfunc, sigmafunc=sigmafunc) * dN
 

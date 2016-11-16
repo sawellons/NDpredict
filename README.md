@@ -36,11 +36,11 @@ import NDpredict as ndp
 z0 = 2.
 zf = 0.
 M0 = 10.5   # All stellar masses are assumed to be logarithmic
-print(ndp.newmass(M0, z0, zf, MtoN=ndp.getnum_zfourge, NtoM=ndp.getmass_zfourge))  # Median stellar mass at zf
+print(ndp.newmass(M0, z0, zf, massfunc='zfourge')  # Median stellar mass at zf
 >> 10.845628052372005
 Marray = numpy.linspace(10.5, 11.5, 10)
 # Probability that a descendant falls into these mass bins
-print(ndp.newmass_distrib(M0, z0, zf, Medges=Marray, MtoN=ndp.getnum_zfourge))
+print(ndp.newmass_distrib(M0, z0, zf, Medges=Marray, massfunc='zfourge'))
 >> array([  7.06694540e-02,   1.26868211e-01,   1.99301323e-01,
          2.45146482e-01,   1.97076762e-01,   7.72581613e-02,
          9.18849092e-03,   1.53544788e-04,   1.03212430e-07])
@@ -65,7 +65,7 @@ vol = 100.^3  # Sample volume in Mpc^3
 z0 = 2.
 zf = 0.
 M0 = 10.5  
-probs = ndp.assign_probabilities(M0, z0, zf, numpy.log10(sample_masses), simvol, MtoN=ndp.getnum_zfourge)
+probs = ndp.assign_probabilities(M0, z0, zf, numpy.log10(sample_masses), vol, massfunc='zfourge')
 # Mean descendant mass
 Mavg = numpy.average(sample_masses, weights=probs)
 ```

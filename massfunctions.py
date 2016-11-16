@@ -1,6 +1,7 @@
 # massfunctions.py: A collection of functions which convert between mass and
 #                   cumulative number density
 # Note: all masses and number densities assumed to be logarithmic
+# Several functions require the mpmath package.
 # Sarah Wellons 6/2016+
 
 import numpy as np
@@ -8,94 +9,197 @@ import torrey_cmf
 import scipy.interpolate as interp
 from scipy.optimize import newton
 
-# ------- Illustris mass functions -------- #
-def getnum_illustris(M, z):
+def getnum(M, z, massfunc='zfourge', target=0):
     """
-    Converts stellar mass to number density at the given redshift
-    using the Illustris mass functions.
+    Converts stellar mass to number density at the given redshift using the given 
+    mass function.  Note: No checks are performed to ensure that the mass function 
+    is well-defined at the given parameters; it is incumbent upon the user to make 
+    an appropriate choice of mass function.
 
     Parameters
     ==========
     M : Stellar mass in units of log(Msun).  May be a single value or an array.
     z : Redshift
+    massfunc : Keyword for desired mass function.  Currently available keywords 
+         include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
+    target : Ignore - Internal parameter used for inverting mass function.
 
     Returns
     =======
     N : Comoving cumulative number density in units of log(Mpc^-3), same dimensions as M.
 
     """
-    tc = torrey_cmf.number_density()
-    return tc.cmf_fit(M,z)
 
-def getmass_illustris(N, z):
+    if massfunc == 'illustris':
+        tc = torrey_cmf.number_density()
+        return tc.cmf_fit(M,z)
+    else:
+        if massfunc == 'zfourge': mf = getnum_zfourge
+        elif massfunc == 'muzzin': mf = getnum_muzzin
+        elif massfunc == 'ilbert': mf = getnum_ilbert
+        elif massfunc == 'liwhite': mf = getnum_liwhite
+        else: raise ValueError("Unrecognized mass function.  Available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].")
+
+    if isinstance(M, np.ndarray) or isinstance(M, list):
+        N = np.zeros([len(M)])
+        for i, elem in enumerate(M):
+            N[i] = mf(elem,z)
+    else:
+        N = mf(M,z)
+
+    return N - target
+
+def getmass(N, z, massfunc='zfourge'):
     """
-    Converts number density to stellar mass at the given redshift
-    using the Illustris mass functions.
+    Converts number density to stellar mass at the given redshift using the the given 
+    mass function.  Note: No checks are performed to ensure that the mass function 
+    is well-defined at the given parameters; it is incumbent upon the user to make 
+    an appropriate choice of mass function.
 
     Parameters
     ==========
     N : Comoving cumulative number density in units of log(Mpc^-3).  May be a single value or an array.
     z : Redshift
+    massfunc : Keyword for desired mass function.  Currently available keywords 
+         include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
 
     Returns
     =======
     mass : Stellar mass in units of log(Msun), same dimensions as N.
 
     """
-    tc = torrey_cmf.number_density()
-    
+
+    if massfunc == 'illustris':
+        tc = torrey_cmf.number_density()
+
+        if isinstance(N, np.ndarray) or isinstance(N, list):
+            mass = np.zeros([len(N)])
+            for i, elem in enumerate(N):
+                mass[i] = tc.mass_from_density(elem, z)
+        else:
+            mass = tc.mass_from_density(N, z)
+
+        return mass
+    else:
+        if massfunc == 'zfourge': mf = getnum_zfourge
+        elif massfunc == 'muzzin': mf = getnum_muzzin
+        elif massfunc == 'ilbert': mf = getnum_ilbert
+        elif massfunc == 'liwhite': mf = getnum_liwhite
+        else: raise ValueError("Unrecognized mass function.  Available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].")
+
     if isinstance(N, np.ndarray) or isinstance(N, list):
         mass = np.zeros([len(N)])
         for i, elem in enumerate(N):
-            mass[i] = tc.mass_from_density(elem, z)
+            mass[i] = newton(mf, 10., args=(z,elem))
     else:
-        mass = tc.mass_from_density(N, z)
+        mass = newton(mf, 10., args=(z,N))
 
     return mass
 
+
+# ------- COSMOS/Ultravista mass functions ------- #
+# Fits from Ilbert et al. 2013 (A&A 556:55)
+def getnum_ilbert(M, z):
+    from mpmath import gammainc
+
+    par1, par2 = ilbertparams(z)
+    x = 10.**(M-par1[1])
+    g1 = gammainc(par1[2]+1,a=x)
+    g2 = gammainc(par1[4]+1,a=x)
+    N1 = np.log10(par1[3]*float(g1) + par1[5]*float(g2))
+
+    x = 10.**(M-par2[1])
+    g1 = gammainc(par2[2]+1,a=x)
+    g2 = gammainc(par2[4]+1,a=x)
+    N2 = np.log10(par2[3]*float(g1) + par2[5]*float(g2))
+
+    return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+
+def ilbertparams(z, type='total'):
+    zarr = np.array([0.35, 0.65, 0.95, 1.3, 1.75, 2.25, 2.75, 3.5])
+    Mchar = np.array([10.88, 11.03, 10.87, 10.71, 10.74, 10.74, 10.76, 10.74])
+    P1 = np.array([1.68, 1.22, 2.03, 1.35, 0.88, 0.62, 0.26, 0.03])*1.e-3
+    a1 = np.array([-0.69, -1., -0.52, -0.08, -0.24, -0.22, -0.15, 0.95])
+    P2 = np.array([0.77, 0.16, 0.29, 0.67, 0.33, 0.15, 0.14, 0.09])*1.e-3
+    a2 = np.array([-1.42, -1.64, -1.62, -1.46, -1.6, -1.6, -1.6, -1.6])
+
+    if z < zarr[0]:
+        return [0, Mchar[0], a1[0], P1[0], a2[0], P2[0]], [zarr[0], Mchar[0], a1[0], P1[0], a2[0], P2[0]]
+    elif z > zarr[-1]:
+        return [zarr[-1], Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]], [50., Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]]
+    else:
+        i = np.argmax(zarr > z) - 1
+
+    return [zarr[i], Mchar[i], a1[i], P1[i], a2[i], P2[i]], [zarr[i+1], Mchar[i+1], a1[i+1], P1[i+1], a2[i+1], P2[i+1]]
+
+# Fits from Muzzin et al. 2013 (ApJ 777:18)
+def getnum_muzzin(M, z):
+    from mpmath import gammainc
+
+    par1, par2 = muzzinparams(z)
+    x = 10.**(M-par1[1])
+    g1 = gammainc(par1[2]+1,a=x)
+    g2 = gammainc(par1[4]+1,a=x)
+    N1 = np.log10(par1[3]*float(g1) + par1[5]*float(g2))
+
+    x = 10.**(M-par2[1])
+    g1 = gammainc(par2[2]+1,a=x)
+    g2 = gammainc(par2[4]+1,a=x)
+    N2 = np.log10(par2[3]*float(g1) + par2[5]*float(g2))
+
+    return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+
+def muzzinparams(z, type='total'):
+    zarr = np.array([0.35, 0.75, 1.25, 1.75, 2.25, 2.75, 3.5]) 
+    Mchar = np.array([10.97, 11., 10.87, 10.81, 10.81, 11.03, 11.49])
+    P1 = np.array([16.27, 16.25, 13.91, 10.13, 4.79, 1.93, 0.09])*1.e-4
+    a1 = np.array([-0.53, -1.17, -1.02, -0.86, -0.55, -1.01, -1.45])
+    P2 = np.array([9.47, 0., 0., 0., 0., 0., 0.])*1.e-4
+    a2 = np.array([-1.37, -1.2, -1.2, -1.2, -1.2, -1.2, -1.2])
+
+    if z < zarr[0]:
+        return [0, Mchar[0], a1[0], P1[0], a2[0], P2[0]], [zarr[0], Mchar[0], a1[0], P1[0], a2[0], P2[0]]
+    elif z > zarr[-1]:
+        return [zarr[-1], Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]], [50., Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]]
+    else:
+        i = np.argmax(zarr > z) - 1
+
+    return [zarr[i], Mchar[i], a1[i], P1[i], a2[i], P2[i]], [zarr[i+1], Mchar[i+1], a1[i+1], P1[i+1], a2[i+1], P2[i+1]]
+
+
+# ------- Low-z mass function from Li & White 2009 (MNRAS 398:2977) ------ #
+# Note: Only applies to a single redshift (z ~ 0.1)!
+def getnum_liwhite(M, z):
+    from mpmath import gammainc
+
+    h = 0.7
+    # log(M*), alpha, Phi*,
+    par_high = [10.71 - np.log10(h**2), -1.99, 0.0044*h**3] 
+    par_mid = [10.37 - np.log10(h**2), -0.9, 0.0132*h**3] 
+    par_low = [9.61 - np.log10(h**2), -1.13, 0.0146*h**3] 
+
+    # Pre-tabulated integrals
+    hightot = 0.000280917465551   # Total contribution from high-mass piece
+    subtractmid = 0.000245951678324549    # Value of middle Schechter fn integrated down to first break
+    midtot = 0.00748165061711    # Total contribution from mid-mass piece
+    subtractlow = 0.00266964412065
+
+    if M > 10.67 - np.log10(h**2):
+        x = 10.**(M-par_high[0])
+        g = gammainc(par_high[1]+1,a=x)
+        return np.log10(par_high[2]*float(g))
+    elif M > 9.33 - np.log10(h**2):
+        x = 10.**(M-par_mid[0])
+        g = gammainc(par_mid[1]+1,a=x)
+        return np.log10(par_mid[2]*float(g)-subtractmid+hightot)
+    else:
+        x = 10.**(M-par_low[0])
+        g = gammainc(par_low[1]+1,a=x)
+        return np.log10(par_low[2]*float(g)-subtractlow+midtot+hightot)
+
 # ------- ZFOURGE mass functions ------- #
 # Fits from Tomczak et al 2014 (ApJ 783:85)
-# Note: If given a redshift outside the fit range (e.g. z < 0.35 or z > 2.75), these functions
-#       will cheerfully give you the values on the nearest boundary.  Caveat emptor.
-# Note2: These functions require the mpmath module.
-def getnum_zfourge(M, z, target=0):
-    """
-    Converts stellar mass to number density at the given redshift
-    using the ZFOURGE mass functions.
-
-    Parameters
-    ==========
-    M : Stellar mass in units of log(Msun).  May be a single value or an array.
-    z : Redshift
-    target : (Optional) Used by getmass_zfourge to invert the mass function.
-
-    Returns
-    =======
-    N : Comoving cumulative number density in units of log(Mpc^-3), same dimensions as M.
-    """
-    if isinstance(M, np.ndarray) or isinstance(M, list):
-        N = np.zeros([len(M)])
-        for i, elem in enumerate(M):
-            N[i] = getnum_zfourge_single(elem,z)
-    else:
-        N = getnum_zfourge_single(M,z)
-
-    return N - target
-
-def getnum_zfourge_single(M, z):
-    """
-    Converts stellar mass to number density at the given redshift using the ZFOURGE mass 
-    functions by linearly interpolating the integrated fits between neighboring redshift bins.
-
-    Parameters
-    ==========
-    M : Stellar mass in units of log(Msun), must be a single value (not an array).
-    z : Redshift
-
-    Returns
-    =======
-    N : Comoving cumulative number density in units of log(Mpc^-3)
-    """
+def getnum_zfourge(M, z):
     from mpmath import gammainc
 
     par1, par2 = zfourgeparams(z)
@@ -110,49 +214,6 @@ def getnum_zfourge_single(M, z):
     N2 = np.log10(10.**(par2[3])*float(g1) + 10.**(par2[5])*float(g2))
 
     return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
-
-def getmass_zfourge(N, z):
-    """
-    Converts number density to stellar mass at the given redshift
-    using the ZFOURGE mass functions.
-
-    Parameters
-    ==========
-    N : Comoving cumulative number density in units of log(Mpc^-3).  May be a single value or an array.
-    z : Redshift
-
-    Returns
-    =======
-    mass : Stellar mass in units of log(Msun), same dimensions as N.
-    """
-    if isinstance(N, np.ndarray) or isinstance(N, list):
-        mass = np.zeros([len(N)])
-        for i, elem in enumerate(N):
-            mass[i] = newton(getnum_zfourge, 10., args=(z,elem))
-    else:
-        mass = newton(getnum_zfourge, 10., args=(z,N))
-
-    return mass
-
-# Calculates the quenched fraction for the given galaxy mass and redshift
-# by comparing the star-forming and quiescent mass functions
-def quenchedfrac_zfourge(M, z):
-    par_q1, par_q2 = zfourgeparams(z, type='quiescent')
-    x_q1 = 10.**(M-par_q1[1])
-    dn_q1 = np.log10(np.log(10)*np.exp(-1.*x_q1)*x_q1*(10.**par_q1[3]*x_q1**(par_q1[2]) + 10.**(par_q1[5])*x_q1**(par_q1[4])))
-    x_q2 = 10.**(M-par_q2[1])
-    dn_q2 = np.log10(np.log(10)*np.exp(-1.*x_q2)*x_q2*(10.**par_q2[3]*x_q2**(par_q2[2]) + 10.**(par_q2[5])*x_q2**(par_q2[4])))
-
-    par_sf1, par_sf2 = zfourgeparams(z, type='star-forming')
-    x_sf1 = 10.**(M-par_sf1[1])
-    dn_sf1 = np.log10(np.log(10)*np.exp(-1.*x_sf1)*x_sf1*(10.**par_sf1[3]*x_sf1**(par_sf1[2]) + 10.**(par_sf1[5])*x_sf1**(par_sf1[4])))
-    x_sf2 = 10.**(M-par_sf2[1])
-    dn_sf2 = np.log10(np.log(10)*np.exp(-1.*x_sf2)*x_sf2*(10.**par_sf2[3]*x_sf2**(par_sf2[2]) + 10.**(par_sf2[5])*x_sf2**(par_sf2[4])))
-
-    fq1 = 10.**dn_q1/(10.**dn_q1+10.**dn_sf1)
-    fq2 = 10.**dn_q2/(10.**dn_q2+10.**dn_sf2)
-
-    return (fq1*(par_q2[0]-z)+fq2*(z-par_q1[0]))/(par_q2[0]-par_q1[0])
 
 # Returns the double-Schechter fit parameters z, log(M*), alpha1, log(P1), alpha2, and log(P2)
 # of the neighboring redshift bins
@@ -185,3 +246,51 @@ def zfourgeparams(z, type='total'):
         i = np.argmax(zarr > z) - 1
 
     return [zarr[i], Mchar[i], a1[i], P1[i], a2[i], P2[i]], [zarr[i+1], Mchar[i+1], a1[i+1], P1[i+1], a2[i+1], P2[i+1]]
+
+# Calculates the quenched fraction for the given galaxy mass and redshift
+# by comparing the star-forming and quiescent mass functions
+def quenchedfrac_zfourge(M, z):
+    par_q1, par_q2 = zfourgeparams(z, type='quiescent')
+    x_q1 = 10.**(M-par_q1[1])
+    dn_q1 = np.log10(np.log(10)*np.exp(-1.*x_q1)*x_q1*(10.**par_q1[3]*x_q1**(par_q1[2]) + 10.**(par_q1[5])*x_q1**(par_q1[4])))
+    x_q2 = 10.**(M-par_q2[1])
+    dn_q2 = np.log10(np.log(10)*np.exp(-1.*x_q2)*x_q2*(10.**par_q2[3]*x_q2**(par_q2[2]) + 10.**(par_q2[5])*x_q2**(par_q2[4])))
+
+    par_sf1, par_sf2 = zfourgeparams(z, type='star-forming')
+    x_sf1 = 10.**(M-par_sf1[1])
+    dn_sf1 = np.log10(np.log(10)*np.exp(-1.*x_sf1)*x_sf1*(10.**par_sf1[3]*x_sf1**(par_sf1[2]) + 10.**(par_sf1[5])*x_sf1**(par_sf1[4])))
+    x_sf2 = 10.**(M-par_sf2[1])
+    dn_sf2 = np.log10(np.log(10)*np.exp(-1.*x_sf2)*x_sf2*(10.**par_sf2[3]*x_sf2**(par_sf2[2]) + 10.**(par_sf2[5])*x_sf2**(par_sf2[4])))
+
+    fq1 = 10.**dn_q1/(10.**dn_q1+10.**dn_sf1)
+    fq2 = 10.**dn_q2/(10.**dn_q2+10.**dn_sf2)
+
+    return (fq1*(par_q2[0]-z)+fq2*(z-par_q1[0]))/(par_q2[0]-par_q1[0])
+
+# ------ OBSOLETE, left in for backwards-compatibility ------ #
+def getnum_illustris(M, z):
+    tc = torrey_cmf.number_density()
+    return tc.cmf_fit(M,z)
+
+def getmass_illustris(N, z):
+    tc = torrey_cmf.number_density()
+    
+    if isinstance(N, np.ndarray) or isinstance(N, list):
+        mass = np.zeros([len(N)])
+        for i, elem in enumerate(N):
+            mass[i] = tc.mass_from_density(elem, z)
+    else:
+        mass = tc.mass_from_density(N, z)
+
+    return mass
+
+def getmass_zfourge(N, z):
+    if isinstance(N, np.ndarray) or isinstance(N, list):
+        mass = np.zeros([len(N)])
+        for i, elem in enumerate(N):
+            mass[i] = newton(getnum_zfourge, 10., args=(z,elem))
+    else:
+        mass = newton(getnum_zfourge, 10., args=(z,N))
+
+    return mass
+
