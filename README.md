@@ -10,7 +10,7 @@ If you employ this package in your research, please cite
 
 To use the number density evolution functions or the mass functions from Illustris, you will need the torrey_cmf package (https://github.com/ptorrey/torrey_cmf).
 
-To use mass functions from ZFOURGE, you will need the mpmath package (mpmath.org).
+To use any of the observational mass functions, you will need the mpmath package (mpmath.org).
 
 ## Functionality
 
@@ -52,6 +52,9 @@ print(ndp.newmass_distrib(M0, z0, zf, Medges=Marray, massfunc='zfourge'))
 The available mass functions can be found in massfunctions.py and currently include:
 - Illustris (Torrey et al 2015)
 - ZFOURGE (Tomczak et al 2014)
+- Muzzin et al 2013
+- Ilbert et al 2013
+- Li & White 2009
 
 If you would like to use another set of mass functions, please email swellons@cfa.harvard.edu to have them added.
 
