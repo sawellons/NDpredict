@@ -1,1 +1,3 @@
+11/17/16:  Switched to fits from Muzzin et al. (2013) which fix alpha = -1.2 at high redshift.  Fixed bug in getmass().
+
 11/16/16:  Added mass functions from Muzzin et al. (2013), Ilbert et al. (2013), and Li & White (2009).  Changed the structure of the massfunction.py functions so that there are global functions getnum and getmass which take a keyword massfunc with one of the following values: ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].  Correspondingly, changed the optional arguments of functions in predictions.py to take that keyword instead of a function name.
