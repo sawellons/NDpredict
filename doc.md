@@ -2,39 +2,55 @@ This file contains the docstrings for all user functions in NDpredict.
 
 ## Nevol.py
 
-###evolvingN(N0, z0, zf):
-Predicts the median number density at zf for a galaxy population with initial number density N0 at redshift z0.
+###evolvingN(N0, z0, zf, type='IllustrisCMF'):
+Predicts the median number density at zf for a galaxy population with initial number density N0 at redshift z0, using results drawn from Illustris or Millennium.
 
 **Parameters**
 - N0 : Initial comoving cumulative number density (in units of log(Mpc^-3)) at z0.
 - z0 : Initial redshift.  If zf > z0, z0 must equal 0.
 - zf : Final redshift for which the prediction is to be made.  May be greater than or less than z0.
+- type : (Optional) Keyword which indicates whether the Illustris or Millennium tracks are to be employed.  Defaults to Illustris.
 
 **Returns**
 - Nf : Median number density of the population at zf, in units of log(Mpc^-3).
 
+###milN(N0, z0, zf)
+Calls evolvingN with type='MillenniumCMF'
+
 ###constantN(N0, z0, zf):
 Comparable to evolvingN, but for a constant number density. 
 
-###sigmaN(N0, z0, zf):
-Predicts the width of the logarithmic number density distribution at zf for a galaxy population with initial number density N0 at redshift z0.
+###sigmaN(N0, z0, zf, type='IllustrisCMF'):
+Predicts the width of the logarithmic number density distribution at zf for a galaxy population with initial number density N0 at redshift z0, using results drawn from Illustris or Millennium.
 
 **Parameters**
 - N0 : Initial comoving cumulative number density (in units of log(Mpc^-3)) at z0.
 - z0 : Initial redshift.  If zf > z0, z0 must equal 0.
 - zf : Final redshift for which the prediction is to be made.  May be greater than or less than z0.
+- type : (Optional) Keyword which indicates whether the Illustris or Millennium tracks are to be employed.  Defaults to Illustris.
 
 **Returns**
 - sigma : The standard deviation of the population's lognormal distribution in number density at zf, in units of log(Mpc^-3).
 
+###milsigma(N0, z0, zf)
+Calls sigmaN with type='MillenniumCMF'
 
+###behrooziN(N0, z0, zf, type='IllustrisCMF'):
+Predicts the median number density and +- 1 sigma contours at zf for a galaxy population with initial number density N0 at redshift z0, using results drawn from Bolshoi by Behroozi et al (2013).  Requires the nd_redshift executable, mf_bolshoi.bin and z_tracks.bin from https://code.google.com/archive/p/nd-redshift/.
 
+**Parameters**
+- N0 : Initial comoving cumulative number density (in units of log(Mpc^-3)) at z0.
+- z0 : Initial redshift.  
+- zf : Final redshift for which the prediction is to be made.  May be greater than or less than z0.
+
+**Returns**
+- Nmed, Nminus, Nplus : [N, N-1sigma, N+1sigma] for the population at zf, in units of log(Mpc^-3).
 
 ## predictions.py
 
 ###assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafunc=sigmaN, massfunc='zfourge'):
 For every galaxy in a sample at redshift zf, find the probability that it is the progenitor/descendant of a galaxy with mass M0 at redshift z0.
-[Note: This is NOT equivalent to the probability that the mass of the descendant/progenitor of the galaxy is M0!  P(Mf|M0) != P(M0|Mf), see Torrey et al 2016.]
+[Note: This is NOT equivalent to the probability that the mass of the descendant/progenitor of the galaxy is M0!  P(Mf|M0) != P(M0|Mf), see Torrey et al 2017.]
 
 **Parameters**
 - M0 : Initial stellar mass in units of log(Msun)
@@ -102,13 +118,14 @@ The two general functions getnum(M,z) and getmass(N,z) can be used for any of th
 - 'ilbert' : From Ilbert et al. (2013), stellar mass functions from the COSMOS/UltraVISTA survey from 0.2 < z < 4.
 - 'liwhite': From Li & White (2009), stellar mass function from SDSS at z < 0.1
  
-###getnum(M, z, massfunc='zfourge'):
+###getnum(M, z, massfunc='zfourge', interpdir='N'):
 Converts stellar mass to number density at the given redshift using the given mass function.  Note: No checks are performed to ensure that the mass function is well-defined at the given parameters; it is incumbent upon the user to make an appropriate choice of mass function.
 
 **Parameters**
 - M : Stellar mass in units of log(Msun).  May be a single value or an array.
 - z : Redshift
 - massfunc : Keyword for desired mass function, as listed above.  
+- interpdir : (Optional) ['N', 'M'] Indicates whether the mass functions should be interpolated across redshift in log N or log M.  Doesn't make a significant difference in most cases.
 
 **Returns**
 - N : Comoving cumulative number density in units of log(Mpc^-3), same dimensions as M.
@@ -120,6 +137,7 @@ Converts number density to stellar mass at the given redshift.
 - N : Comoving cumulative number density in units of log(Mpc^-3).  May be a single value or an array.
 - z : Redshift
 - massfunc : Keyword for desired mass function, as listed above.  
+- interpdir : (Optional) ['N', 'M'] Indicates whether the mass functions should be interpolated across redshift in log N or log M.  Doesn't make a significant difference in most cases.
 
 **Returns**
 - mass : Stellar mass in units of log(Msun), same dimensions as N.

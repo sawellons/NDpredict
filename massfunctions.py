@@ -9,59 +9,96 @@ import torrey_cmf
 import scipy.interpolate as interp
 from scipy.optimize import newton
 
-def getnum(M, z, massfunc='zfourge', target=0):
+def getnum(M, z, massfunc='zfourge', interpdir='N'):
     """
-    Converts stellar mass to number density at the given redshift using the given 
-    mass function.  Note: No checks are performed to ensure that the mass function 
-    is well-defined at the given parameters; it is incumbent upon the user to make 
-    an appropriate choice of mass function.
+    Converts stellar mass to number density at the given redshift using the given mass function.  
+    Note: No checks are performed to ensure that the mass function is well-defined at the given 
+    parameters; it is incumbent upon the user to make an appropriate choice of mass function.
 
     Parameters
     ==========
     M : Stellar mass in units of log(Msun).  May be a single value or an array.
     z : Redshift
-    massfunc : Keyword for desired mass function.  Currently available keywords 
-         include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
-    target : Ignore - Internal parameter used for inverting mass function.
+    massfunc : Keyword for desired mass function. Currently available keywords include ['illustris', 
+               'zfourge', 'muzzin', 'ilbert', 'liwhite']. Defaults to 'zfourge'.
+    interpdir : (Optional) ['N', 'M'] Indicates whether the mass functions should be interpolated 
+                across redshifts in log N or log M.  Doesn't make a significant difference in most cases.
 
     Returns
     =======
     N : Comoving cumulative number density in units of log(Mpc^-3), same dimensions as M.
 
     """
-
     if massfunc == 'illustris':
         tc = torrey_cmf.number_density()
         return tc.cmf_fit(M,z)
     else:
-        if massfunc == 'zfourge': mf = getnum_zfourge
-        elif massfunc == 'muzzin': mf = getnum_muzzin
-        elif massfunc == 'ilbert': mf = getnum_ilbert
-        elif massfunc == 'liwhite': mf = getnum_liwhite
+        if massfunc == 'zfourge': 
+            mf = zfourge_function
+            par1, par2 = zfourgeparams(z)
+        elif massfunc == 'muzzin': 
+            mf = muzzin_function
+            par1, par2 = muzzinparams(z)
+        elif massfunc == 'ilbert': 
+            mf = ilbert_function
+            par1, par2 = ilbertparams(z)
+        elif massfunc == 'liwhite': 
+            mf = liwhite_function
+            par1, par2 = liwhiteparams(z)
         else: raise ValueError("Unrecognized mass function.  Available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].")
 
     if isinstance(M, np.ndarray) or isinstance(M, list):
-        N = np.zeros([len(M)])
+        N1 = np.zeros([len(M)])
+        N2 = np.zeros([len(M)])
         for i, elem in enumerate(M):
-            N[i] = mf(elem,z)
+            N1[i] = mf(elem,par1)
+            N2[i] = mf(elem,par2)
+        Nmin = np.min(np.concatenate((N1,N2)))*1.05
+        Nmax = np.max(np.concatenate((N1,N2)))*0.95
     else:
-        N = mf(M,z)
+        N1 = mf(M, par1)
+        N2 = mf(M, par2)
+        Nmin = min(N1, N2)*1.05
+        Nmax = max(N1, N2)*0.95
 
-    return N - target
+    if par1[0] == z: return N1
+    if par2[0] == z: return N2
 
-def getmass(N, z, massfunc='zfourge'):
+    if interpdir == 'N':    # Interpolate N linearly by dz
+        return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+    else:                   # Interpolate M by dz, then N by dM to get desired M-values
+        npts = int(max(25, (Nmax-Nmin)/0.05))  # Ensure adequately small spacing between N-values
+        Narr = np.linspace(Nmin, Nmax, npts)
+
+        Marr1 = np.zeros(npts)
+        Marr2 = np.zeros(npts)
+        for i in range(0,npts): 
+            Marr1[i] = newton(mf, 11., args=(par1,Narr[i]), maxiter=500)
+            Marr2[i] = newton(mf, 11., args=(par2,Narr[i]), maxiter=500)
+
+        Minterp = (Marr1*(par2[0]-z)+Marr2*(z-par1[0]))/(par2[0]-par1[0])
+        if Minterp[0] > Minterp[-1]: 
+            Minterp = Minterp[::-1]
+            Narr = Narr[::-1]
+
+        f = interp.interp1d(Minterp, Narr, kind='cubic')
+
+        return f(M)
+
+def getmass(N, z, massfunc='zfourge', interpdir='N'):
     """
-    Converts number density to stellar mass at the given redshift using the the given 
-    mass function.  Note: No checks are performed to ensure that the mass function 
-    is well-defined at the given parameters; it is incumbent upon the user to make 
-    an appropriate choice of mass function.
+    Converts number density to stellar mass at the given redshift using the given mass function.  
+    Note: No checks are performed to ensure that the mass function is well-defined at the given 
+    parameters; it is incumbent upon the user to make an appropriate choice of mass function.
 
     Parameters
     ==========
     N : Comoving cumulative number density in units of log(Mpc^-3).  May be a single value or an array.
     z : Redshift
-    massfunc : Keyword for desired mass function.  Currently available keywords 
-         include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].
+    massfunc : Keyword for desired mass function. Currently available keywords include ['illustris', 
+               'zfourge', 'muzzin', 'ilbert', 'liwhite']. Defaults to 'zfourge'.
+    interpdir : (Optional) ['N', 'M'] Indicates whether the mass functions should be interpolated 
+                across redshifts in log N or log M.  Doesn't make a significant difference in most cases.
 
     Returns
     =======
@@ -81,39 +118,67 @@ def getmass(N, z, massfunc='zfourge'):
 
         return mass
     else:
-        if massfunc == 'zfourge': mf = getnum_zfourge
-        elif massfunc == 'muzzin': mf = getnum_muzzin
-        elif massfunc == 'ilbert': mf = getnum_ilbert
-        elif massfunc == 'liwhite': mf = getnum_liwhite
+        if massfunc == 'zfourge': 
+            mf = zfourge_function
+            par1, par2 = zfourgeparams(z)
+        elif massfunc == 'muzzin': 
+            mf = muzzin_function
+            par1, par2 = muzzinparams(z)
+        elif massfunc == 'ilbert': 
+            mf = ilbert_function
+            par1, par2 = ilbertparams(z)
+        elif massfunc == 'liwhite': 
+            mf = liwhite_function
+            par1, par2 = liwhiteparams(z)
         else: raise ValueError("Unrecognized mass function.  Available keywords include ['illustris', 'zfourge', 'muzzin', 'ilbert', 'liwhite'].")
 
     if isinstance(N, np.ndarray) or isinstance(N, list):
-        mass = np.zeros([len(N)])
+        M1 = np.zeros([len(N)])
+        M2 = np.zeros([len(N)])
         for i, elem in enumerate(N):
-            mass[i] = newton(getnum, 10., args=(z,massfunc,elem))
+            M1[i] = newton(mf, 11., args=(par1,elem), maxiter=500)
+        if par1[0] == z: return M1
+        for i, elem in enumerate(N):
+            M2[i] = newton(mf, 11., args=(par2,elem), maxiter=500)
+        Mmin = np.min(np.concatenate((M1,M2)))*0.9
+        Mmax = np.max(np.concatenate((M1,M2)))*1.1
     else:
-        mass = newton(getnum, 10., args=(z,massfunc,N))
+        M1 = newton(mf, 11., args=(par1,N), maxiter=500)
+        if par1[0] == z: return M1
+        M2 = newton(mf, 11., args=(par2,N), maxiter=500)
+        Mmin = min(M1, M2)*0.9
+        Mmax = max(M1, M2)*1.1
 
-    return mass
+    if interpdir == 'N':    
+        npts = int(max(25, (Mmax-Mmin)/0.05))  
+        Marr = np.linspace(Mmin, Mmax, npts)
 
+        Narr1 = np.zeros(npts)
+        Narr2 = np.zeros(npts)
+        for i in range(0,npts): 
+            Narr1[i] = mf(Marr[i], par1)
+            Narr2[i] = mf(Marr[i], par2)
+
+        Ninterp = (Narr1*(par2[0]-z)+Narr2*(z-par1[0]))/(par2[0]-par1[0])
+        if Ninterp[0] > Ninterp[-1]: 
+            Ninterp = Ninterp[::-1]
+            Marr = Marr[::-1]
+
+        f = interp.interp1d(Ninterp, Marr, kind='cubic')
+
+        return f(N)
+    else:                   
+        return (M1*(par2[0]-z)+M2*(z-par1[0]))/(par2[0]-par1[0])
 
 # ------- COSMOS/Ultravista mass functions ------- #
 # Fits from Ilbert et al. 2013 (A&A 556:55)
-def getnum_ilbert(M, z):
+def ilbert_function(M, par, target=0):
     from mpmath import gammainc
 
-    par1, par2 = ilbertparams(z)
-    x = 10.**(M-par1[1])
-    g1 = gammainc(par1[2]+1,a=x)
-    g2 = gammainc(par1[4]+1,a=x)
-    N1 = np.log10(par1[3]*float(g1) + par1[5]*float(g2))
-
-    x = 10.**(M-par2[1])
-    g1 = gammainc(par2[2]+1,a=x)
-    g2 = gammainc(par2[4]+1,a=x)
-    N2 = np.log10(par2[3]*float(g1) + par2[5]*float(g2))
-
-    return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+    x = 10.**(M-par[1])
+    g1 = gammainc(par[2]+1,a=x)
+    g2 = gammainc(par[4]+1,a=x)
+    return np.log10(par[3]*float(g1) + par[5]*float(g2)) - target
 
 def ilbertparams(z, type='total'):
     zarr = np.array([0.35, 0.65, 0.95, 1.3, 1.75, 2.25, 2.75, 3.5])
@@ -133,21 +198,13 @@ def ilbertparams(z, type='total'):
     return [zarr[i], Mchar[i], a1[i], P1[i], a2[i], P2[i]], [zarr[i+1], Mchar[i+1], a1[i+1], P1[i+1], a2[i+1], P2[i+1]]
 
 # Fits from Muzzin et al. 2013 (ApJ 777:18)
-def getnum_muzzin(M, z):
+def muzzin_function(M, par, target=0):
     from mpmath import gammainc
 
-    par1, par2 = muzzinparams(z)
-    x = 10.**(M-par1[1])
-    g1 = gammainc(par1[2]+1,a=x)
-    g2 = gammainc(par1[4]+1,a=x)
-    N1 = np.log10(par1[3]*float(g1) + par1[5]*float(g2))
-
-    x = 10.**(M-par2[1])
-    g1 = gammainc(par2[2]+1,a=x)
-    g2 = gammainc(par2[4]+1,a=x)
-    N2 = np.log10(par2[3]*float(g1) + par2[5]*float(g2))
-
-    return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+    x = 10.**(M-par[1])
+    g1 = gammainc(par[2]+1,a=x)
+    g2 = gammainc(par[4]+1,a=x)
+    return np.log10(par[3]*float(g1) + par[5]*float(g2))-target
 
 def muzzinparams(z, type='total'):
     zarr = np.array([0.35, 0.75, 1.25, 1.75, 2.25, 2.75, 3.5]) 
@@ -176,7 +233,7 @@ def muzzinparams(z, type='total'):
 
 # ------- Low-z mass function from Li & White 2009 (MNRAS 398:2977) ------ #
 # Note: Only applies to a single redshift (z ~ 0.1)!
-def getnum_liwhite(M, z):
+def liwhite_function(M, par, target=0):
     from mpmath import gammainc
 
     h = 0.7
@@ -194,33 +251,30 @@ def getnum_liwhite(M, z):
     if M > 10.67 - np.log10(h**2):
         x = 10.**(M-par_high[0])
         g = gammainc(par_high[1]+1,a=x)
-        return np.log10(par_high[2]*float(g))
+        return np.log10(par_high[2]*float(g))-target
     elif M > 9.33 - np.log10(h**2):
         x = 10.**(M-par_mid[0])
         g = gammainc(par_mid[1]+1,a=x)
-        return np.log10(par_mid[2]*float(g)-subtractmid+hightot)
+        return np.log10(par_mid[2]*float(g)-subtractmid+hightot)-target
     else:
         x = 10.**(M-par_low[0])
         g = gammainc(par_low[1]+1,a=x)
-        return np.log10(par_low[2]*float(g)-subtractlow+midtot+hightot)
+        return np.log10(par_low[2]*float(g)-subtractlow+midtot+hightot)-target
 
-# ------- ZFOURGE mass functions ------- #
-# Fits from Tomczak et al 2014 (ApJ 783:85)
-def getnum_zfourge(M, z):
+# Dummy function, this mass function is only defined at z=0
+def liwhiteparams(z):
+    return [0,1], [1,0]
+
+
+def zfourge_function(M, par, target=0):
     from mpmath import gammainc
 
-    par1, par2 = zfourgeparams(z)
-    x = 10.**(M-par1[1])
-    g1 = gammainc(par1[2]+1,a=x)
-    g2 = gammainc(par1[4]+1,a=x)
-    N1 = np.log10(10.**(par1[3])*float(g1) + 10.**(par1[5])*float(g2))
+    x = 10.**(M-par[1])
+    g1 = gammainc(par[2]+1,a=x)
+    g2 = gammainc(par[4]+1,a=x)
+    N = np.log10(10.**(par[3])*float(g1) + 10.**(par[5])*float(g2))
 
-    x = 10.**(M-par2[1])
-    g1 = gammainc(par2[2]+1,a=x)
-    g2 = gammainc(par2[4]+1,a=x)
-    N2 = np.log10(10.**(par2[3])*float(g1) + 10.**(par2[5])*float(g2))
-
-    return (N1*(par2[0]-z)+N2*(z-par1[0]))/(par2[0]-par1[0])
+    return N-target
 
 # Returns the double-Schechter fit parameters z, log(M*), alpha1, log(P1), alpha2, and log(P2)
 # of the neighboring redshift bins
@@ -267,9 +321,9 @@ def zfourgeparams(z, type='total'):
     #     P2 = np.array([-4.29, -3.15, -3.39, -3.17, -3.43, -3.38, -50., -50.])
 
     if z < zarr[0]:
-        return [0, Mchar[0], a1[0], P1[0], a2[0], P2[0]], [zarr[0], Mchar[0], a1[0], P1[0], a2[0], P2[0]]
+        return [z, Mchar[0], a1[0], P1[0], a2[0], P2[0]], [zarr[1], Mchar[1], a1[1], P1[1], a2[1], P2[1]]
     elif z > zarr[-1]:
-        return [zarr[-1], Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]], [50., Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]]
+        return [z, Mchar[-1], a1[-1], P1[-1], a2[-1], P2[-1]], [50., Mchar[-2], a1[-2], P1[-2], a2[-2], P2[-2]]
     else:
         i = np.argmax(zarr > z) - 1
 

@@ -11,7 +11,7 @@ def assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafun
     For every galaxy in a sample at redshift zf, find the probability that it is the progenitor/descendant 
     of a galaxy with mass M0 at redshift z0.
     [Note: This is NOT equivalent to the probability that the mass of the descendant/progenitor of the
-    the galaxy is M0!  P(Mf|M0) != P(M0|Mf), see Torrey et al 2016.]
+    the galaxy is M0!  P(Mf|M0) != P(M0|Mf), see Torrey et al 2017.]
 
     Parameters
     ==========
@@ -35,7 +35,7 @@ def assign_probabilities(M0, z0, zf, M_sample, volume, Nfunc=evolvingN, sigmafun
     Array of progenitor probabilities, the same dimension as M_sample
     """
     N0 = getnum(M0, z0, massfunc=massfunc)
-    N_sample = getmass(M_sample, zf, massfunc=massfunc)
+    N_sample = getnum(M_sample, zf, massfunc=massfunc)
     dpdlogN = newnum_distrib(N0, z0, zf, N_sample, Nfunc=Nfunc, sigmafunc=sigmafunc)
     pgal = dpdlogN / 10.**N_sample / volume
     return pgal 

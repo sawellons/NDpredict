@@ -5,12 +5,14 @@ NDpredict may be used with observational or simulation data to predict the motio
 ## Requirements
 
 If you employ this package in your research, please cite 
-- Wellons and Torrey 2016 (arxiv:1606.07815)
-- Torrey et al 2016 (arxiv:1606.07271)
+- Wellons and Torrey 2017 (arxiv:1606.07815)
+- Torrey et al 2017 (arxiv:1606.07271)
 
 To use the number density evolution functions or the mass functions from Illustris, you will need the torrey_cmf package (https://github.com/ptorrey/torrey_cmf).
 
 To use any of the observational mass functions, you will need the mpmath package (mpmath.org).
+
+To use the number density evolution functions from Bolshoi, you will need the nd_redshift executable and the files mf_bolshoi.bin and z_tracks.bin from https://code.google.com/archive/p/nd-redshift/.  Please cite Behroozi et al 2013 (https://arxiv.org/abs/1308.3232) if these functions are used.
 
 ## Functionality
 
