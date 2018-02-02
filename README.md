@@ -58,7 +58,7 @@ The available mass functions can be found in massfunctions.py and currently incl
 - Ilbert et al 2013
 - Li & White 2009
 
-If you would like to use another set of mass functions, please email swellons@cfa.harvard.edu to have them added.
+If you would like to use another set of mass functions, please email sarah.wellons@northwestern.edu to have them added.
 
 ### Assigning progenitor/descendant probabilities
 
